@@ -1,5 +1,19 @@
 import { useState } from "react";
+import { PlusCircle, X } from "lucide-react";
 
+import { MultiCombobox } from "@/components/multi-combobox";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -25,11 +39,13 @@ function OptionSelect({
   options,
   value,
   onChange,
+  placeholder,
 }: {
   id: string;
   options: Option[];
   value: string | null;
   onChange: (value: string) => void;
+  placeholder?: string;
 }) {
   return (
     <Select
@@ -38,7 +54,7 @@ function OptionSelect({
       onValueChange={(v) => onChange(v as string)}
     >
       <SelectTrigger id={id} className="w-full">
-        <SelectValue />
+        <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
         {options.map((o) => (
@@ -52,8 +68,12 @@ function OptionSelect({
 }
 
 export default function AdminEnrollmentsPage() {
-  const { students, courses } = useEnrollmentStore();
+  const { students, courses, addStudentsToCourse, removeStudentFromCourse } =
+    useEnrollmentStore();
 
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [formCourse, setFormCourse] = useState<string | null>(null);
+  const [formStudents, setFormStudents] = useState<string[]>([]);
   const [mode, setMode] = useState<"course" | "student">("course");
   const [filterCourse, setFilterCourse] = useState("all");
   const [filterStudent, setFilterStudent] = useState("all");
@@ -67,21 +87,41 @@ export default function AdminEnrollmentsPage() {
     label: `${c.courseCode} — ${c.courseTitle}`,
   }));
 
-  // ไม่มี Enrollment[] แยกแล้ว — สร้างแถวจาก enrolledCourses ของนักศึกษาแต่ละคน
-  const rows = students
-    .flatMap((s) =>
-      s.enrolledCourses.map((courseCode) => ({
-        studentId: s.studentId,
-        name: `${s.firstName} ${s.lastName}`,
-        courseCode,
-        courseTitle:
-          courses.find((c) => c.courseCode === courseCode)?.courseTitle ?? "-",
-      })),
-    )
+  // นักศึกษาที่ยังไม่ได้ลงทะเบียนวิชาที่เลือก
+  const availableStudentOptions: Option[] = formCourse
+    ? students
+      .filter((s) => !s.enrolledCourses.includes(formCourse))
+      .map((s) => ({
+        value: s.studentId,
+        label: `${s.studentId} — ${s.firstName} ${s.lastName}`,
+      }))
+    : [];
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      setFormCourse(null);
+      setFormStudents([]);
+    }
+  };
+
+  const handleEnroll = () => {
+    if (!formCourse || formStudents.length === 0) return;
+    addStudentsToCourse(formCourse, formStudents);
+    handleDialogOpenChange(false);
+  };
+
+  // หนึ่งแถวต่อหนึ่งวิชา — รายชื่อนักศึกษาดึงจาก enrolledCourses
+  const rows = courses
+    .map((c) => ({
+      course: c,
+      enrolled: students.filter((s) => s.enrolledCourses.includes(c.courseCode)),
+    }))
     .filter((r) =>
       mode === "course"
-        ? filterCourse === "all" || r.courseCode === filterCourse
-        : filterStudent === "all" || r.studentId === filterStudent,
+        ? filterCourse === "all" || r.course.courseCode === filterCourse
+        : filterStudent === "all" ||
+        r.enrolled.some((s) => s.studentId === filterStudent),
     );
 
   return (
@@ -89,9 +129,64 @@ export default function AdminEnrollmentsPage() {
       <div>
         <h1 className="text-xl font-semibold">จัดการการลงทะเบียน</h1>
         <p className="text-sm text-muted-foreground">
-          รายการลงทะเบียนของนักศึกษาทุกคน (ดึงจากวิชาที่นักศึกษาลงทะเบียนไว้)
+          Admin ลงทะเบียนและยกเลิกการลงทะเบียนให้นักศึกษาได้ทุกคน
         </p>
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogTrigger render={<Button />}>
+          <PlusCircle className="h-4 w-4" />
+          ลงทะเบียนให้นักศึกษา
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ลงทะเบียนให้นักศึกษา</DialogTitle>
+            <DialogDescription>
+              เลือกวิชาก่อน แล้วเลือกนักศึกษาได้มากกว่า 1 คน
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="formCourse">วิชา</Label>
+              <OptionSelect
+                id="formCourse"
+                options={courseOptions}
+                value={formCourse}
+                placeholder="เลือกวิชา"
+                onChange={(v) => {
+                  setFormCourse(v);
+                  // เปลี่ยนวิชา → ล้างรายชื่อที่เลือกไว้
+                  setFormStudents([]);
+                }}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="formStudents">นักศึกษา</Label>
+              {/* key ทำให้ Combobox รีเซ็ตทุกครั้งที่เปลี่ยนวิชา */}
+              <MultiCombobox
+                key={formCourse ?? "none"}
+                id="formStudents"
+                options={availableStudentOptions}
+                value={formStudents}
+                onChange={setFormStudents}
+                disabled={!formCourse}
+                placeholder={
+                  formCourse ? "เลือกนักศึกษา" : "เลือกวิชาก่อน"
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={!formCourse || formStudents.length === 0}
+              onClick={handleEnroll}
+            >
+              <PlusCircle className="h-4 w-4" />
+              ลงทะเบียน ({formStudents.length} คน)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs
         value={mode}
@@ -123,10 +218,10 @@ export default function AdminEnrollmentsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>รหัสนักศึกษา</TableHead>
-              <TableHead>ชื่อ-นามสกุล</TableHead>
               <TableHead>รหัสวิชา</TableHead>
               <TableHead>ชื่อวิชา</TableHead>
+              <TableHead className="w-24">จำนวน นศ.</TableHead>
+              <TableHead>นักศึกษาที่ลงทะเบียน</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -140,12 +235,44 @@ export default function AdminEnrollmentsPage() {
                 </TableCell>
               </TableRow>
             )}
-            {rows.map((r) => (
-              <TableRow key={`${r.studentId}-${r.courseCode}`}>
-                <TableCell>{r.studentId}</TableCell>
-                <TableCell>{r.name}</TableCell>
-                <TableCell>{r.courseCode}</TableCell>
-                <TableCell>{r.courseTitle}</TableCell>
+            {rows.map(({ course, enrolled }) => (
+              <TableRow key={course.courseCode}>
+                <TableCell className="font-medium">
+                  {course.courseCode}
+                </TableCell>
+                <TableCell>{course.courseTitle}</TableCell>
+                <TableCell>{enrolled.length}</TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1.5">
+                    {enrolled.length === 0 && (
+                      <span className="text-sm text-muted-foreground">
+                        ยังไม่มีนักศึกษา
+                      </span>
+                    )}
+                    {enrolled.map((s) => (
+                      <Badge
+                        key={s.studentId}
+                        variant="secondary"
+                        className="gap-1"
+                      >
+                        {s.firstName} {s.lastName}
+                        <button
+                          type="button"
+                          aria-label={`ลบ ${s.firstName} ${s.lastName} ออกจากวิชา ${course.courseCode}`}
+                          className="rounded-sm hover:text-destructive"
+                          onClick={() =>
+                            removeStudentFromCourse(
+                              course.courseCode,
+                              s.studentId,
+                            )
+                          }
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

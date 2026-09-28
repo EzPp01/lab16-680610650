@@ -25,6 +25,30 @@ export const students: Student[] = [
     status: "Active",
     enrolledCourses: ["ISNE101", "CPE302"],
   },
+  {
+    studentId: "650610004",
+    firstName: "Florence",
+    lastName: "Pugh",
+    program: "CPE",
+    status: "Active",
+    enrolledCourses: [],
+  },
+  {
+    studentId: "650610005",
+    firstName: "Robert",
+    lastName: "Downey",
+    program: "ISNE",
+    status: "Active",
+    enrolledCourses: [],
+  },
+  {
+    studentId: "650610006",
+    firstName: "Zendaya",
+    lastName: "Coleman",
+    program: "ISNE",
+    status: "Active",
+    enrolledCourses: [],
+  },
 ];
 
 export const courses: Course[] = [

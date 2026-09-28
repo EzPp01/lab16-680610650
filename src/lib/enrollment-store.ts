@@ -10,6 +10,10 @@ import type { Course, Student } from "@/lib/types";
 type EnrollmentStore = {
   students: Student[];
   courses: Course[];
+  /** ลงทะเบียนวิชาให้นักศึกษาหลายคนพร้อมกัน (ไม่ซ้ำกับที่มีอยู่แล้ว) */
+  addStudentsToCourse: (courseCode: string, studentIds: string[]) => void;
+  /** เอานักศึกษาออกจากวิชา (ลบรหัสวิชาออกจาก enrolledCourses ของคนนั้น) */
+  removeStudentFromCourse: (courseCode: string, studentId: string) => void;
   /** ลบนักศึกษา */
   removeStudent: (studentId: string) => void;
   /** เพิ่มวิชาใหม่ (รหัสวิชาต้องไม่ซ้ำ) — คืนค่า true ถ้าเพิ่มสำเร็จ */
@@ -27,6 +31,30 @@ export const useEnrollmentStore = create<EnrollmentStore>()(
     (set, get) => ({
       students: initialStudents,
       courses: initialCourses,
+
+      addStudentsToCourse: (courseCode, studentIds) =>
+        set((state) => ({
+          students: state.students.map((s) =>
+            studentIds.includes(s.studentId) &&
+              !s.enrolledCourses.includes(courseCode)
+              ? { ...s, enrolledCourses: [...s.enrolledCourses, courseCode] }
+              : s,
+          ),
+        })),
+
+      removeStudentFromCourse: (courseCode, studentId) =>
+        set((state) => ({
+          students: state.students.map((s) =>
+            s.studentId === studentId
+              ? {
+                ...s,
+                enrolledCourses: s.enrolledCourses.filter(
+                  (c) => c !== courseCode,
+                ),
+              }
+              : s,
+          ),
+        })),
 
       removeStudent: (studentId) =>
         set((state) => ({
