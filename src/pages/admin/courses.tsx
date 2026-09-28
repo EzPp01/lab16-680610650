@@ -11,6 +11,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { InstructorCombobox } from "@/components/instructor-combobox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,15 +43,13 @@ export default function AdminCoursesPage() {
     const [addOpen, setAddOpen] = useState(false);
     const [code, setCode] = useState("");
     const [title, setTitle] = useState("");
-    const [instructorText, setInstructorText] = useState("");
-    const [error, setError] = useState("");
+    const [selectedInstructors, setSelectedInstructors] = useState<string[]>([]);
     const [toDelete, setToDelete] = useState<Course | null>(null);
 
     const resetForm = () => {
         setCode("");
         setTitle("");
-        setInstructorText("");
-        setError("");
+        setSelectedInstructors([]);
     };
 
     const handleAddOpenChange = (open: boolean) => {
@@ -58,27 +57,26 @@ export default function AdminCoursesPage() {
         if (!open) resetForm();
     };
 
-    const handleAdd = () => {
-        const courseCode = code.trim().toUpperCase();
-        const courseTitle = title.trim();
-        if (!courseCode || !courseTitle) return;
-
-        // ผู้สอนคั่นด้วยเครื่องหมายจุลภาค ตัดชื่อซ้ำออก
-        const instructors = Array.from(
-            new Set(
-                instructorText
-                    .split(",")
-                    .map((n) => n.trim())
-                    .filter(Boolean),
-            ),
+    const trimmedCode = code.trim();
+    // ไม่สนตัวพิมพ์เล็ก-ใหญ่ (cs101 = CS101)
+    const duplicate =
+        trimmedCode !== "" &&
+        courses.some(
+            (c) => c.courseCode.toLowerCase() === trimmedCode.toLowerCase(),
         );
 
-        const ok = addCourse({ courseCode, courseTitle, instructors });
-        if (!ok) {
-            setError(`รหัสวิชา ${courseCode} มีอยู่แล้ว`);
-            return;
+    // ผู้สอนที่มีอยู่แล้วในทุกวิชา (ไม่ซ้ำกัน)
+    const allInstructors = Array.from(
+        new Set(courses.flatMap((c) => c.instructors ?? [])),
+    );
+
+    const handleAdd = () => {
+        const courseCode = trimmedCode.toUpperCase();
+        const courseTitle = title.trim();
+        if (!courseCode || !courseTitle || duplicate) return;
+        if (addCourse({ courseCode, courseTitle, instructors: selectedInstructors })) {
+            handleAddOpenChange(false);
         }
-        handleAddOpenChange(false);
     };
 
     const enrolledCount = toDelete
@@ -104,9 +102,9 @@ export default function AdminCoursesPage() {
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>เพิ่มวิชา</DialogTitle>
+                            <DialogTitle>เพิ่มวิชาใหม่</DialogTitle>
                             <DialogDescription>
-                                กรอกรหัสวิชา ชื่อวิชา และผู้สอน (หลายคนคั่นด้วยเครื่องหมาย ,)
+                                วิชาที่เพิ่มจะไปโผล่เป็นตัวเลือกตอนลงทะเบียนให้นักศึกษาได้ทันที
                             </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4">
@@ -116,13 +114,14 @@ export default function AdminCoursesPage() {
                                     id="courseCode"
                                     placeholder="เช่น CPE303"
                                     value={code}
-                                    aria-invalid={!!error}
-                                    onChange={(e) => {
-                                        setCode(e.target.value);
-                                        setError("");
-                                    }}
+                                    aria-invalid={duplicate}
+                                    onChange={(e) => setCode(e.target.value)}
                                 />
-                                {error && <p className="text-xs text-destructive">{error}</p>}
+                                {duplicate && (
+                                    <p className="text-sm font-medium text-destructive">
+                                        มีรหัสวิชา {trimmedCode.toUpperCase()} นี้แล้ว
+                                    </p>
+                                )}
                             </div>
                             <div className="grid gap-1.5">
                                 <Label htmlFor="courseTitle">ชื่อวิชา</Label>
@@ -135,21 +134,20 @@ export default function AdminCoursesPage() {
                             </div>
                             <div className="grid gap-1.5">
                                 <Label htmlFor="courseInstructors">ผู้สอน</Label>
-                                <Input
+                                <InstructorCombobox
                                     id="courseInstructors"
-                                    placeholder="เช่น Dome, Nirand"
-                                    value={instructorText}
-                                    onChange={(e) => setInstructorText(e.target.value)}
+                                    options={allInstructors}
+                                    value={selectedInstructors}
+                                    onChange={setSelectedInstructors}
                                 />
                             </div>
                         </div>
                         <DialogFooter>
                             <Button
-                                disabled={!code.trim() || !title.trim()}
+                                disabled={!trimmedCode || !title.trim() || duplicate}
                                 onClick={handleAdd}
                             >
-                                <PlusCircle className="h-4 w-4" />
-                                เพิ่มวิชา
+                                บันทึก
                             </Button>
                         </DialogFooter>
                     </DialogContent>
@@ -183,6 +181,11 @@ export default function AdminCoursesPage() {
                                 <TableCell>{c.courseTitle}</TableCell>
                                 <TableCell>
                                     <div className="flex flex-wrap gap-1.5">
+                                        {(c.instructors ?? []).length === 0 && (
+                                            <span className="text-sm text-muted-foreground">
+                                                ยังไม่มีผู้สอน
+                                            </span>
+                                        )}
                                         {(c.instructors ?? []).map((name) => (
                                             <Badge key={name} variant="secondary" className="gap-1">
                                                 {name}
@@ -223,7 +226,9 @@ export default function AdminCoursesPage() {
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>ลบวิชา {toDelete?.courseCode}?</AlertDialogTitle>
+                        <AlertDialogTitle>
+                            ลบวิชา {toDelete?.courseCode}?
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
                             {toDelete?.courseTitle}
                             {enrolledCount > 0
