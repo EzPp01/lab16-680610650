@@ -17,11 +17,17 @@ type EnrollmentStore = {
   drop: (studentId: string, courseId: string) => void;
   /** ลบนักศึกษา พร้อมการลงทะเบียนทั้งหมดของคนนั้น */
   removeStudent: (studentId: string) => void;
-  /** ลบวิชาออกจากรายวิชาที่เปิดสอน พร้อม cascade ลบ enrollment ที่อ้างถึงวิชานั้นทั้งหมด */
+  /** ลบวิชา พร้อม cascade ลบ enrollment ที่อ้างถึงวิชานั้นทั้งหมด */
   removeCourse: (courseId: string) => void;
+  /** เพิ่มวิชาใหม่ (รหัสวิชาต้องไม่ซ้ำ) — คืนค่า true ถ้าเพิ่มสำเร็จ */
+  addCourse: (course: Course) => boolean;
+  /** เพิ่มผู้สอนให้วิชา (ไม่ซ้ำกับที่มีอยู่แล้ว) */
+  addInstructor: (courseId: string, name: string) => void;
+  /** ลบผู้สอนออกจากวิชา */
+  removeInstructor: (courseId: string, name: string) => void;
 };
 
-export const useEnrollmentStore = create<EnrollmentStore>((set) => ({
+export const useEnrollmentStore = create<EnrollmentStore>((set, get) => ({
   students: initialStudents,
   courses: initialCourses,
   enrollments: initialEnrollments,
@@ -52,5 +58,32 @@ export const useEnrollmentStore = create<EnrollmentStore>((set) => ({
     set((state) => ({
       courses: state.courses.filter((c) => c.courseId !== courseId),
       enrollments: state.enrollments.filter((e) => e.courseId !== courseId),
+    })),
+
+  addCourse: (course) => {
+    const exists = get().courses.some(
+      (c) => c.courseId.toLowerCase() === course.courseId.toLowerCase(),
+    );
+    if (exists) return false;
+    set((state) => ({ courses: [...state.courses, course] }));
+    return true;
+  },
+
+  addInstructor: (courseId, name) =>
+    set((state) => ({
+      courses: state.courses.map((c) =>
+        c.courseId === courseId && !c.instructors.includes(name)
+          ? { ...c, instructors: [...c.instructors, name] }
+          : c,
+      ),
+    })),
+
+  removeInstructor: (courseId, name) =>
+    set((state) => ({
+      courses: state.courses.map((c) =>
+        c.courseId === courseId
+          ? { ...c, instructors: c.instructors.filter((i) => i !== name) }
+          : c,
+      ),
     })),
 }));
