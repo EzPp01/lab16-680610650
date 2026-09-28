@@ -36,7 +36,7 @@ import { useEnrollmentStore } from "@/lib/enrollment-store";
 import type { Course } from "@/lib/types";
 
 export default function AdminCoursesPage() {
-    const { courses, enrollments, addCourse, removeCourse, removeInstructor } =
+    const { courses, students, addCourse, removeCourse, removeInstructor } =
         useEnrollmentStore();
 
     const [addOpen, setAddOpen] = useState(false);
@@ -59,9 +59,9 @@ export default function AdminCoursesPage() {
     };
 
     const handleAdd = () => {
-        const courseId = code.trim().toUpperCase();
+        const courseCode = code.trim().toUpperCase();
         const courseTitle = title.trim();
-        if (!courseId || !courseTitle) return;
+        if (!courseCode || !courseTitle) return;
 
         // ผู้สอนคั่นด้วยเครื่องหมายจุลภาค ตัดชื่อซ้ำออก
         const instructors = Array.from(
@@ -73,16 +73,17 @@ export default function AdminCoursesPage() {
             ),
         );
 
-        const ok = addCourse({ courseId, courseTitle, instructors });
+        const ok = addCourse({ courseCode, courseTitle, instructors });
         if (!ok) {
-            setError(`รหัสวิชา ${courseId} มีอยู่แล้ว`);
+            setError(`รหัสวิชา ${courseCode} มีอยู่แล้ว`);
             return;
         }
         handleAddOpenChange(false);
     };
 
     const enrolledCount = toDelete
-        ? enrollments.filter((e) => e.courseId === toDelete.courseId).length
+        ? students.filter((s) => s.enrolledCourses.includes(toDelete.courseCode))
+            .length
         : 0;
 
     return (
@@ -177,19 +178,19 @@ export default function AdminCoursesPage() {
                             </TableRow>
                         )}
                         {courses.map((c) => (
-                            <TableRow key={c.courseId}>
-                                <TableCell className="font-medium">{c.courseId}</TableCell>
+                            <TableRow key={c.courseCode}>
+                                <TableCell className="font-medium">{c.courseCode}</TableCell>
                                 <TableCell>{c.courseTitle}</TableCell>
                                 <TableCell>
                                     <div className="flex flex-wrap gap-1.5">
-                                        {c.instructors.map((name) => (
+                                        {(c.instructors ?? []).map((name) => (
                                             <Badge key={name} variant="secondary" className="gap-1">
                                                 {name}
                                                 <button
                                                     type="button"
                                                     aria-label={`ลบผู้สอน ${name}`}
                                                     className="rounded-sm hover:text-destructive"
-                                                    onClick={() => removeInstructor(c.courseId, name)}
+                                                    onClick={() => removeInstructor(c.courseCode, name)}
                                                 >
                                                     <X className="size-3" />
                                                 </button>
@@ -201,7 +202,7 @@ export default function AdminCoursesPage() {
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        aria-label={`ลบวิชา ${c.courseId}`}
+                                        aria-label={`ลบวิชา ${c.courseCode}`}
                                         className="text-destructive hover:text-destructive"
                                         onClick={() => setToDelete(c)}
                                     >
@@ -222,11 +223,11 @@ export default function AdminCoursesPage() {
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>ลบวิชา {toDelete?.courseId}?</AlertDialogTitle>
+                        <AlertDialogTitle>ลบวิชา {toDelete?.courseCode}?</AlertDialogTitle>
                         <AlertDialogDescription>
                             {toDelete?.courseTitle}
                             {enrolledCount > 0
-                                ? ` — จะยกเลิกการลงทะเบียนของนักศึกษา ${enrolledCount} รายการที่อ้างถึงวิชานี้ด้วย`
+                                ? ` — จะเอาวิชานี้ออกจากการลงทะเบียนของนักศึกษา ${enrolledCount} คนด้วย`
                                 : ""}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
@@ -235,7 +236,7 @@ export default function AdminCoursesPage() {
                         <AlertDialogAction
                             variant="destructive"
                             onClick={() => {
-                                if (toDelete) removeCourse(toDelete.courseId);
+                                if (toDelete) removeCourse(toDelete.courseCode);
                                 setToDelete(null);
                             }}
                         >
